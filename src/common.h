@@ -10,6 +10,7 @@ extern "C" {
 
 uint32_t xorshift32(uint32_t* state);
 char random_base(uint32_t* state);
+void generate_sequence(char* sequence, size_t length, uint32_t* state);
 
 /* Returns the generated length; query has capacity for max_length characters. */
 size_t simulate_sequence(const char* target, size_t target_length,

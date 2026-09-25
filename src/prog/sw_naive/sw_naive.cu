@@ -107,9 +107,8 @@ int run_sw_naive(int argc, char** argv)
         for (size_t j = 0; j < arguments.target_length; ++j) {
             targets[i * arguments.target_length + j] = 'N';
         }
-        for (size_t j = 0; j < target_length; ++j) {
-            targets[i * arguments.target_length + j] = random_base(&state);
-        }
+        generate_sequence(
+            &targets[i * arguments.target_length], target_length, &state);
     }
     
     // create query sequences

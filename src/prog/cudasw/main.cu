@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "sw_naive.h"
+#include "sw_diagonal.h"
 #include "vec_add.h"
 
 static void print_usage(const char* program)
@@ -10,7 +11,8 @@ static void print_usage(const char* program)
     printf("Usage: %s <command> [options]\n\n"
            "Commands:\n"
            "    vec-add    Run the managed-memory vector operation.\n"
-           "    sw-naive   Run the naive Smith-Waterman batch operation.\n",
+           "    sw-naive   Run the naive Smith-Waterman batch operation.\n"
+           "    sw-diagonal  Sketch anti-diagonal Smith-Waterman execution.\n",
            program);
 }
 
@@ -27,6 +29,10 @@ int main(int argc, char** argv)
 
     if (strcmp(argv[1], "sw-naive") == 0) {
         return run_sw_naive(argc - 1, argv + 1);
+    }
+
+    if (strcmp(argv[1], "sw-diagonal") == 0) {
+        return run_sw_diagonal(argc - 1, argv + 1);
     }
 
     fprintf(stderr, "error: unknown command '%s'\n", argv[1]);

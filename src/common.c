@@ -27,6 +27,13 @@ char random_base(uint32_t* state)
     return bases[xorshift32(state) >> 30];
 }
 
+void generate_sequence(char* sequence, size_t length, uint32_t* state)
+{
+    for (size_t i = 0; i < length; ++i) {
+        sequence[i] = random_base(state);
+    }
+}
+
 size_t simulate_sequence(
     const char* target, size_t target_length, char* query, size_t max_length,
     size_t sub_rate, size_t ins_rate, size_t del_rate, uint32_t* state)

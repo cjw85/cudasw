@@ -22,6 +22,7 @@ WARNINGS := -Xcompiler -Wall,-Wextra,-Werror
 C_WARNINGS := -Wall -Wextra -Wpedantic -Werror
 CFLAGS := -std=c11
 CPPFLAGS := -Isrc -Isrc/prog/vec_add -Isrc/prog/sw_naive
+CPPFLAGS += -Isrc/prog/sw_diagonal
 
 ifeq ($(BUILD_MODE),release)
 MODE_FLAGS := -O3
@@ -35,11 +36,14 @@ NVCCFLAGS := $(MODE_FLAGS) $(WARNINGS)
 CUDA_SOURCES := \
 	src/prog/cudasw/main.cu \
 	src/prog/vec_add/vec_add.cu \
-	src/prog/sw_naive/sw_naive.cu
+	src/prog/sw_naive/sw_naive.cu \
+	src/prog/sw_diagonal/sw_diagonal.cu
 C_SOURCES := \
 	src/common.c \
 	src/prog/vec_add/vec_add_args.c \
-	src/prog/sw_naive/sw_naive_args.c
+	src/prog/sw_naive/sw_naive_args.c \
+	src/prog/sw_diagonal/sw_diagonal_args.c \
+	src/prog/sw_diagonal/sw_diagonal_cpu.c
 CUDA_OBJECTS := $(patsubst src/%.cu,$(OBJ_DIR)/%.o,$(CUDA_SOURCES))
 C_OBJECTS := $(patsubst src/%.c,$(OBJ_DIR)/%.o,$(C_SOURCES))
 OBJECTS := $(CUDA_OBJECTS) $(C_OBJECTS)
