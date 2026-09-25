@@ -14,6 +14,7 @@ BUILD_DIR ?= build$(if $(filter release,$(BUILD_MODE)),,/$(BUILD_MODE))
 OBJ_DIR := $(BUILD_DIR)/obj
 DEP_DIR := $(BUILD_DIR)/deps
 BIN := $(BUILD_DIR)/cudasw
+TEST_BIN := $(BUILD_DIR)/test/sw_naive_test
 
 # CUDA 12.0 emits GNU-style #line directives itself, so forwarding
 # -Wpedantic together with -Werror makes NVCC fail on its generated source.
@@ -43,12 +44,25 @@ CUDA_OBJECTS := $(patsubst src/%.cu,$(OBJ_DIR)/%.o,$(CUDA_SOURCES))
 C_OBJECTS := $(patsubst src/%.c,$(OBJ_DIR)/%.o,$(C_SOURCES))
 OBJECTS := $(CUDA_OBJECTS) $(C_OBJECTS)
 DEPS := $(patsubst $(OBJ_DIR)/%.o,$(DEP_DIR)/%.d,$(OBJECTS))
+TEST_OBJECT := $(BUILD_DIR)/test/sw_naive_test.o
+TEST_SUPPORT_OBJECTS := \
+	$(OBJ_DIR)/prog/sw_naive/sw_naive.o \
+	$(OBJ_DIR)/common.o \
+	$(OBJ_DIR)/prog/sw_naive/sw_naive_args.o
+TEST_DEP := $(DEP_DIR)/test/sw_naive_test.d
 
-.PHONY: build run clean help print-config
+.PHONY: build run test clean help print-config
 
 build: $(BIN) ## Build the CUDA starter program (default)
 
 $(BIN): $(OBJECTS)
+	@mkdir -p $(dir $@)
+	$(NVCC) $(NVCCFLAGS) $^ -o $@
+
+test: $(TEST_BIN) ## Build and run deterministic CUDA tests
+	$(TEST_BIN)
+
+$(TEST_BIN): $(TEST_OBJECT) $(TEST_SUPPORT_OBJECTS)
 	@mkdir -p $(dir $@)
 	$(NVCC) $(NVCCFLAGS) $^ -o $@
 
@@ -60,6 +74,10 @@ $(OBJ_DIR)/%.o: src/%.c
 	@mkdir -p $(dir $@) $(dir $(patsubst $(OBJ_DIR)/%.o,$(DEP_DIR)/%.d,$@))
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(C_MODE_FLAGS) $(C_WARNINGS) -MMD -MP \
 		-MF $(patsubst $(OBJ_DIR)/%.o,$(DEP_DIR)/%.d,$@) -c $< -o $@
+
+$(TEST_OBJECT): test/sw_naive_test.cu
+	@mkdir -p $(dir $@) $(dir $(TEST_DEP))
+	$(NVCC) $(CPPFLAGS) $(NVCCFLAGS) -MMD -MP -MF $(TEST_DEP) -c $< -o $@
 
 run: $(BIN) ## Build and run the vec-add subcommand
 	$(BIN) vec-add
@@ -76,4 +94,4 @@ help: ## Show this help message
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 	@printf '\n'
 
--include $(DEPS)
+-include $(DEPS) $(TEST_DEP)
