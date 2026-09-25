@@ -36,6 +36,7 @@ CUDA_SOURCES := \
 	src/prog/vec_add/vec_add.cu \
 	src/prog/sw_naive/sw_naive.cu
 C_SOURCES := \
+	src/common.c \
 	src/prog/vec_add/vec_add_args.c \
 	src/prog/sw_naive/sw_naive_args.c
 CUDA_OBJECTS := $(patsubst src/%.cu,$(OBJ_DIR)/%.o,$(CUDA_SOURCES))

@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-#define SW_BATCH_MAX_SEQUENCE_LENGTH 1024
+#define SW_NAIVE_MAX_TARGET_LENGTH 1024
 
 typedef struct sw_naive_arguments {
     size_t n_targets;

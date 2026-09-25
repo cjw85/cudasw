@@ -1,53 +1,32 @@
 // Implementation of the Smith-Waterman batch operation.
 
 #include "cuda_utils.h"
+#include "common.h"
 
 #include <stdio.h>
 #include <stdint.h>
+#include <inttypes.h>
 
 #include "sw_naive_args.h"
 #include "sw_naive.h"
 
 
-// dumb RNG
-static inline uint32_t xorshift32(uint32_t *state)
-{
-    uint32_t x = *state;
-    // we don't want to get to zero
-    if (x == 0) {
-        x = 0xDEADBEEF;
-    }
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
-    if (x == 0) {
-        x = 0xDEADBEEF;
-    }
-    *state = x;
-    return x;
-}
-
-
-static char random_base(uint32_t *state)
-{
-    static const char bases[] = "ACGT";
-    uint32_t value = xorshift32(state);
-    return bases[value >> 30];  // top two bits: 0..3
-}
-
-
 __global__ void sw_naive_kernel(
-    const char* targets, const char* queries, uint32_t* scores,
-    int n_targets, int n_queries, int target_length)
+    const char* targets, const int* target_lengths,
+    const char* queries, const int* query_lengths,
+    uint32_t* scores,
+    int n_targets, int n_generated_queries, int target_length)
 {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
-    if (index >= n_targets * n_queries) {
+    if (index >= n_targets * n_generated_queries) {
         return;
     }
-    const int target_idx = index / n_queries;
-    const int query_idx = index % n_queries;
+    const int target_idx = index / n_generated_queries;
+    const int query_idx = index % n_generated_queries;
     const char* target = &targets[target_idx * target_length];
     const char* query = &queries[query_idx * target_length];
+    const int actual_target_length = target_lengths[target_idx];
+    const int query_length = query_lengths[query_idx];
 
     // Semiglobal alignment: leading and trailing end gaps are free. Each
     // thread is responsible for one target-query pair.
@@ -56,23 +35,23 @@ __global__ void sw_naive_kernel(
     int32_t i_score = -2;  // insertion score
     int32_t e_score = 0;  // free end-gap score
 
-    // Each thread owns two fixed-size rows. Only the first target_length
-    // entries are used, so shorter runtime sequences do less work
+    // Each thread owns two fixed-size rows. Only the first actual_target_length
+    // entries are used, so shorter runtime targets do less work
     // yes this is quite naive way of doing things, but we're learning
-    int32_t prev_storage[SW_BATCH_MAX_SEQUENCE_LENGTH];
-    int32_t curr_storage[SW_BATCH_MAX_SEQUENCE_LENGTH];
+    int32_t prev_storage[SW_NAIVE_MAX_TARGET_LENGTH];
+    int32_t curr_storage[SW_NAIVE_MAX_TARGET_LENGTH];
     int32_t* prev = prev_storage;
     int32_t* curr = curr_storage;
-    for (int ti = 0; ti < target_length; ++ti) {
+    for (int ti = 0; ti < actual_target_length; ++ti) {
         prev[ti] = e_score;
         curr[ti] = e_score;
     }
 
     int32_t best_end_score = e_score;
-    for (size_t qi = 0; qi < target_length; ++qi) {
+    for (int qi = 0; qi < query_length; ++qi) {
         // The first column is a free leading gap in the target.
         curr[0] = e_score;
-        for (size_t ti = 0; ti < target_length; ++ti) {
+        for (size_t ti = 0; ti < actual_target_length; ++ti) {
             int32_t match = (target[ti] == query[qi]) ? m_score : 0;
             int32_t diag = (ti > 0 ? prev[ti - 1] : e_score) + match;
             int32_t del = prev[ti] + d_score;
@@ -81,7 +60,7 @@ __global__ void sw_naive_kernel(
         }
 
         // The last target column is a free trailing gap in the target.
-        best_end_score = max(best_end_score, curr[target_length - 1]);
+        best_end_score = max(best_end_score, curr[actual_target_length - 1]);
 
         int32_t* temp = prev;
         prev = curr;
@@ -89,7 +68,7 @@ __global__ void sw_naive_kernel(
     }
 
     // The final query row is a free trailing gap in the query.
-    for (int ti = 0; ti < target_length; ++ti) {
+    for (int ti = 0; ti < actual_target_length; ++ti) {
         best_end_score = max(best_end_score, prev[ti]);
     }
 
@@ -106,66 +85,55 @@ int run_sw_naive(int argc, char** argv)
 
     // create target sequences
     char* targets = NULL;
+    int* target_lengths = NULL;
     size_t bytes = arguments.n_targets * arguments.target_length * sizeof(char);
     CHECK_CUDA(cudaMallocManaged(&targets, bytes));
+    CHECK_CUDA(cudaMallocManaged(&target_lengths,
+                                 arguments.n_targets * sizeof(int)));
     
     // fill target sequences with random bases
     uint32_t state = arguments.seed;
+    size_t min_target_length = (arguments.target_length * 80) / 100;
+    if (min_target_length == 0) {
+        min_target_length = 1;
+    }
+    size_t target_length_span = arguments.target_length - min_target_length + 1;
     for (size_t i = 0; i < arguments.n_targets; ++i) {
+        size_t target_length = min_target_length;
+        if (target_length_span > 1) {
+            target_length += xorshift32(&state) % target_length_span;
+        }
+        target_lengths[i] = (int)target_length;
         for (size_t j = 0; j < arguments.target_length; ++j) {
+            targets[i * arguments.target_length + j] = 'N';
+        }
+        for (size_t j = 0; j < target_length; ++j) {
             targets[i * arguments.target_length + j] = random_base(&state);
         }
     }
     
     // create query sequences
     char* queries = NULL;
+    int* query_lengths = NULL;
     size_t n_generated_queries =
         arguments.n_targets * arguments.n_queries_per_target;
     size_t query_bytes = n_generated_queries * arguments.target_length * sizeof(char);
     CHECK_CUDA(cudaMallocManaged(&queries, query_bytes));
+    CHECK_CUDA(cudaMallocManaged(&query_lengths, n_generated_queries * sizeof(int)));
 
-    // for each target sequence, create N query sequences
+    // For each target sequence, create N fixed-capacity query buffers.
     for (size_t i = 0; i < arguments.n_targets; ++i) {
         for (size_t j = 0; j < arguments.n_queries_per_target; ++j) {
-            // introduce substitution errors with a small probability based on sub_rate
+            char* query = &queries[(i * arguments.n_queries_per_target + j) *
+                                   arguments.target_length];
             for (size_t k = 0; k < arguments.target_length; ++k) {
-                char base = targets[i * arguments.target_length + k];
-                uint32_t random_byte = xorshift32(&state) >> 24;
-                if (random_byte < (arguments.sub_rate * 256u) / 100u) {
-                    char new_base;
-                    do {
-                        new_base = random_base(&state);
-                    } while (new_base == base);
-                    base = new_base;
-                }
-                queries[(i * arguments.n_queries_per_target + j) * arguments.target_length + k] = base;
+                query[k] = 'N';
             }
-            // introduce deletions errors with a small probability based on del_rate
-            // this isn't realistic, we're fudging things here just to keep lengths the same for simplicity
-            for (size_t k = 0; k < arguments.target_length; ++k) {
-                int del = (xorshift32(&state) >> 24) < (arguments.del_rate * 256u) / 100u ? 1 : 0;
-                if (del) {
-                    // shift the remaining sequence to the left by one position
-                    memmove(&queries[(i * arguments.n_queries_per_target + j) * arguments.target_length + k],
-                            &queries[(i * arguments.n_queries_per_target + j) * arguments.target_length + k + 1],
-                            arguments.target_length - k - 1);
-                    // fill the last position with a random base
-                    queries[(i * arguments.n_queries_per_target + j) * arguments.target_length + arguments.target_length - 1] = random_base(&state);
-                }
-            }
-            // introduce insertion errors with a small probability based on ins_rate
-            // again we fudge things be dropping a base
-            for (size_t k = 0; k < arguments.target_length; ++k) {
-                int ins = (xorshift32(&state) >> 24) < (arguments.ins_rate * 256u) / 100u ? 1 : 0;
-                if (ins) {
-                    // shift the remaining sequence to the right by one position
-                    memmove(&queries[(i * arguments.n_queries_per_target + j) * arguments.target_length + k + 1],
-                            &queries[(i * arguments.n_queries_per_target + j) * arguments.target_length + k],
-                            arguments.target_length - k - 1);
-                    // insert a random base at the current position
-                    queries[(i * arguments.n_queries_per_target + j) * arguments.target_length + k] = random_base(&state);
-                }
-            }
+            size_t query_length = simulate_sequence(
+                &targets[i * arguments.target_length], target_lengths[i],
+                query, arguments.target_length, arguments.sub_rate,
+                arguments.ins_rate, arguments.del_rate, &state);
+            query_lengths[i * arguments.n_queries_per_target + j] = (int)query_length;
         }
     }
 
@@ -177,7 +145,9 @@ int run_sw_naive(int argc, char** argv)
     uint32_t* scores;
     CHECK_CUDA(cudaMallocManaged(&scores, n_alignments * sizeof(uint32_t)));
     // launch the CUDA kernel to compute Smith-Waterman scores
-    sw_naive_kernel<<<blocks, arguments.threads_per_block>>>(targets, queries, scores,
+    sw_naive_kernel<<<blocks, arguments.threads_per_block>>>(
+        targets, target_lengths, queries,
+        query_lengths, scores,
         arguments.n_targets, n_generated_queries, arguments.target_length);
     CHECK_CUDA(cudaGetLastError());
     CHECK_CUDA(cudaDeviceSynchronize());
@@ -199,13 +169,16 @@ int run_sw_naive(int argc, char** argv)
     for (size_t q_index = 0; q_index < n_generated_queries; ++q_index) {
         size_t source_target = q_index / arguments.n_queries_per_target;
         printf(
-            "Best score for query %zu: %u (target %u, source target %zu)\n",
-            q_index, best_score[q_index], best_target[q_index], source_target);
+            "Query %zu (length %d); Target %" PRIu32 "; Correct target %zu (length %d)\n",
+            q_index, query_lengths[q_index], best_target[q_index], source_target,
+            target_lengths[source_target]);
     }
 
     // free allocated memory
     CHECK_CUDA(cudaFree(targets));
+    CHECK_CUDA(cudaFree(target_lengths));
     CHECK_CUDA(cudaFree(queries));
+    CHECK_CUDA(cudaFree(query_lengths));
     CHECK_CUDA(cudaFree(scores));
 
     return EXIT_SUCCESS;

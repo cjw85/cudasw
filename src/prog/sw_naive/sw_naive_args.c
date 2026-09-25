@@ -48,10 +48,10 @@ static error_t parse_opt(int key, char* arg, struct argp_state* state)
         break;
     case ARGP_KEY_END:
         if (arguments->target_length == 0 ||
-            arguments->target_length > SW_BATCH_MAX_SEQUENCE_LENGTH) {
+            arguments->target_length > SW_NAIVE_MAX_TARGET_LENGTH) {
             argp_error(state,
                        "target length must be between 1 and %d",
-                       SW_BATCH_MAX_SEQUENCE_LENGTH);
+                       SW_NAIVE_MAX_TARGET_LENGTH);
         }
         break;
     case 'r':
