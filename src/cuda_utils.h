@@ -1,12 +1,11 @@
 #ifndef CUDA_UTILS_H
 #define CUDA_UTILS_H
 
+#include <cuda_runtime.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <cuda_runtime.h>
-
-static inline void cuda_check(cudaError_t status, const char* expression)
+static inline void cuda_check(cudaError_t status, const char *expression)
 {
     if (status == cudaSuccess) {
         return;

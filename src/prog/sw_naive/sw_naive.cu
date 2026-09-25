@@ -1,20 +1,18 @@
 // Implementation of the Smith-Waterman batch operation.
 
-#include "cuda_utils.h"
 #include "common.h"
-
-#include <stdio.h>
-#include <stdint.h>
-#include <inttypes.h>
-
-#include "sw_naive_args.h"
+#include "cuda_utils.h"
 #include "sw_naive.h"
+#include "sw_naive_args.h"
 
+#include <inttypes.h>
+#include <stdint.h>
+#include <stdio.h>
 
 __global__ void sw_naive_kernel(
-    const char* targets, const int* target_lengths,
-    const char* queries, const int* query_lengths,
-    uint32_t* scores,
+    const char *targets, const int *target_lengths,
+    const char *queries, const int *query_lengths,
+    uint32_t *scores,
     int n_targets, int n_generated_queries, int target_length)
 {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -23,25 +21,25 @@ __global__ void sw_naive_kernel(
     }
     const int target_idx = index / n_generated_queries;
     const int query_idx = index % n_generated_queries;
-    const char* target = &targets[target_idx * target_length];
-    const char* query = &queries[query_idx * target_length];
+    const char *target = &targets[target_idx * target_length];
+    const char *query = &queries[query_idx * target_length];
     const int actual_target_length = target_lengths[target_idx];
     const int query_length = query_lengths[query_idx];
 
     // Semiglobal alignment: leading and trailing end gaps are free. Each
     // thread is responsible for one target-query pair.
-    int32_t m_score = 8;  // match score
-    int32_t d_score = -2;  // deletion score
-    int32_t i_score = -2;  // insertion score
-    int32_t e_score = 0;  // free end-gap score
+    int32_t m_score = 8; // match score
+    int32_t d_score = -2; // deletion score
+    int32_t i_score = -2; // insertion score
+    int32_t e_score = 0; // free end-gap score
 
     // Each thread owns two fixed-size rows. Only the first actual_target_length
     // entries are used, so shorter runtime targets do less work
     // yes this is quite naive way of doing things, but we're learning
     int32_t prev_storage[SW_NAIVE_MAX_TARGET_LENGTH];
     int32_t curr_storage[SW_NAIVE_MAX_TARGET_LENGTH];
-    int32_t* prev = prev_storage;
-    int32_t* curr = curr_storage;
+    int32_t *prev = prev_storage;
+    int32_t *curr = curr_storage;
     for (int ti = 0; ti < actual_target_length; ++ti) {
         prev[ti] = e_score;
         curr[ti] = e_score;
@@ -62,7 +60,7 @@ __global__ void sw_naive_kernel(
         // The last target column is a free trailing gap in the target.
         best_end_score = max(best_end_score, curr[actual_target_length - 1]);
 
-        int32_t* temp = prev;
+        int32_t *temp = prev;
         prev = curr;
         curr = temp;
     }
@@ -75,8 +73,7 @@ __global__ void sw_naive_kernel(
     scores[index] = best_end_score;
 }
 
-
-int run_sw_naive(int argc, char** argv)
+int run_sw_naive(int argc, char **argv)
 {
     sw_naive_arguments_t arguments;
     if (sw_naive_parse_arguments(argc, argv, &arguments) != 0) {
@@ -84,13 +81,13 @@ int run_sw_naive(int argc, char** argv)
     }
 
     // create target sequences
-    char* targets = NULL;
-    int* target_lengths = NULL;
+    char *targets = NULL;
+    int *target_lengths = NULL;
     size_t bytes = arguments.n_targets * arguments.target_length * sizeof(char);
     CHECK_CUDA(cudaMallocManaged(&targets, bytes));
     CHECK_CUDA(cudaMallocManaged(&target_lengths,
-                                 arguments.n_targets * sizeof(int)));
-    
+        arguments.n_targets * sizeof(int)));
+
     // fill target sequences with random bases
     uint32_t state = arguments.seed;
     size_t min_target_length = (arguments.target_length * 80) / 100;
@@ -110,12 +107,11 @@ int run_sw_naive(int argc, char** argv)
         generate_sequence(
             &targets[i * arguments.target_length], target_length, &state);
     }
-    
+
     // create query sequences
-    char* queries = NULL;
-    int* query_lengths = NULL;
-    size_t n_generated_queries =
-        arguments.n_targets * arguments.n_queries_per_target;
+    char *queries = NULL;
+    int *query_lengths = NULL;
+    size_t n_generated_queries = arguments.n_targets * arguments.n_queries_per_target;
     size_t query_bytes = n_generated_queries * arguments.target_length * sizeof(char);
     CHECK_CUDA(cudaMallocManaged(&queries, query_bytes));
     CHECK_CUDA(cudaMallocManaged(&query_lengths, n_generated_queries * sizeof(int)));
@@ -123,8 +119,7 @@ int run_sw_naive(int argc, char** argv)
     // For each target sequence, create N fixed-capacity query buffers.
     for (size_t i = 0; i < arguments.n_targets; ++i) {
         for (size_t j = 0; j < arguments.n_queries_per_target; ++j) {
-            char* query = &queries[(i * arguments.n_queries_per_target + j) *
-                                   arguments.target_length];
+            char *query = &queries[(i * arguments.n_queries_per_target + j) * arguments.target_length];
             for (size_t k = 0; k < arguments.target_length; ++k) {
                 query[k] = 'N';
             }
@@ -138,10 +133,8 @@ int run_sw_naive(int argc, char** argv)
 
     // each cuda thread will handle one sequence pair (target, query)
     size_t n_alignments = n_generated_queries * arguments.n_targets;
-    size_t blocks =
-        (n_alignments + arguments.threads_per_block - 1) /
-        arguments.threads_per_block;
-    uint32_t* scores;
+    size_t blocks = (n_alignments + arguments.threads_per_block - 1) / arguments.threads_per_block;
+    uint32_t *scores;
     CHECK_CUDA(cudaMallocManaged(&scores, n_alignments * sizeof(uint32_t)));
     // launch the CUDA kernel to compute Smith-Waterman scores
     sw_naive_kernel<<<blocks, arguments.threads_per_block>>>(
@@ -154,8 +147,8 @@ int run_sw_naive(int argc, char** argv)
     // get best score for each query and associate it with its target
     // given how we generated the sequences, this should come out in
     // blocks of queries corresponding to each target sequence
-    uint32_t best_score[n_generated_queries] = {0};
-    uint32_t best_target[n_generated_queries] = {0};
+    uint32_t best_score[n_generated_queries] = { 0 };
+    uint32_t best_target[n_generated_queries] = { 0 };
     for (size_t t_index = 0; t_index < arguments.n_targets; ++t_index) {
         for (size_t q_index = 0; q_index < n_generated_queries; ++q_index) {
             size_t index = t_index * n_generated_queries + q_index;

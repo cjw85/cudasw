@@ -1,22 +1,24 @@
+#include "sw_diagonal.h"
+#include "sw_naive.h"
+#include "sw_tiled.h"
+#include "vec_add.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "sw_naive.h"
-#include "sw_diagonal.h"
-#include "vec_add.h"
-
-static void print_usage(const char* program)
+static void print_usage(const char *program)
 {
     printf("Usage: %s <command> [options]\n\n"
            "Commands:\n"
            "    vec-add    Run the managed-memory vector operation.\n"
            "    sw-naive   Run the naive Smith-Waterman batch operation.\n"
-           "    sw-diagonal  Sketch anti-diagonal Smith-Waterman execution.\n",
-           program);
+           "    sw-diagonal  Sketch anti-diagonal Smith-Waterman execution.\n"
+           "    sw-tiled   Sketch tiled wavefront Smith-Waterman execution.\n",
+        program);
 }
 
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
     if (argc < 2 || strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
         print_usage(argv[0]);
@@ -33,6 +35,10 @@ int main(int argc, char** argv)
 
     if (strcmp(argv[1], "sw-diagonal") == 0) {
         return run_sw_diagonal(argc - 1, argv + 1);
+    }
+
+    if (strcmp(argv[1], "sw-tiled") == 0) {
+        return run_sw_tiled(argc - 1, argv + 1);
     }
 
     fprintf(stderr, "error: unknown command '%s'\n", argv[1]);

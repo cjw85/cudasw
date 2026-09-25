@@ -1,8 +1,8 @@
 #include "vec_add_args.h"
 
 #include <argp.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 static const char doc[] = "Run a vector operation.";
 static const char args_doc[] = "";
@@ -19,9 +19,9 @@ static const struct argp_option options[] = {
     { 0 }
 };
 
-static error_t parse_opt(int key, char* arg, struct argp_state* state)
+static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
-    vec_add_arguments_t* arguments = state->input;
+    vec_add_arguments_t *arguments = state->input;
 
     switch (key) {
     case 'o':
@@ -40,11 +40,10 @@ static error_t parse_opt(int key, char* arg, struct argp_state* state)
         argp_error(state, "unexpected positional argument: '%s'", arg);
         break;
     case ARGP_KEY_END:
-        if (strcmp(arguments->operation, "add") != 0 &&
-            strcmp(arguments->operation, "multiply") != 0) {
+        if (strcmp(arguments->operation, "add") != 0 && strcmp(arguments->operation, "multiply") != 0) {
             argp_error(state,
-                       "unsupported operation '%s' (expected add or multiply)",
-                       arguments->operation);
+                "unsupported operation '%s' (expected add or multiply)",
+                arguments->operation);
         }
         break;
     default:
@@ -55,7 +54,7 @@ static error_t parse_opt(int key, char* arg, struct argp_state* state)
 
 static const struct argp argp = { options, parse_opt, args_doc, doc, 0, 0, 0 };
 
-int vec_add_parse_arguments(int argc, char** argv, vec_add_arguments_t* arguments)
+int vec_add_parse_arguments(int argc, char **argv, vec_add_arguments_t *arguments)
 {
     arguments->operation = "add";
     arguments->b_value = 2.0F;

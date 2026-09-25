@@ -1,8 +1,8 @@
 #include "cuda_utils.h"
-#include "vec_add_args.h"
 #include "vec_add.h"
+#include "vec_add_args.h"
 
-__global__ void add_vectors(const float* a, const float* b, float* result, int length)
+__global__ void add_vectors(const float *a, const float *b, float *result, int length)
 {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index < length) {
@@ -10,7 +10,7 @@ __global__ void add_vectors(const float* a, const float* b, float* result, int l
     }
 }
 
-__global__ void multiply_vectors(const float* a, const float* b, float* result, int length)
+__global__ void multiply_vectors(const float *a, const float *b, float *result, int length)
 {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index < length) {
@@ -18,16 +18,16 @@ __global__ void multiply_vectors(const float* a, const float* b, float* result, 
     }
 }
 
-int run_vec_add(int argc, char** argv)
+int run_vec_add(int argc, char **argv)
 {
     vec_add_arguments_t arguments;
     if (vec_add_parse_arguments(argc, argv, &arguments) != 0) {
         return EXIT_FAILURE;
     }
 
-    float* a = NULL;
-    float* b = NULL;
-    float* result = NULL;
+    float *a = NULL;
+    float *b = NULL;
+    float *result = NULL;
     const size_t bytes = arguments.vector_length * sizeof(*a);
 
     // Managed allocations are accessible from both the CPU and GPU.

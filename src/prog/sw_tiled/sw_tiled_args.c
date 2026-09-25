@@ -1,18 +1,21 @@
-#include "sw_diagonal_args.h"
+#include "sw_tiled_args.h"
 
 #include <argp.h>
+#include <stdint.h>
 #include <stdlib.h>
 
-static const char doc[] = "Sketch the anti-diagonal Smith-Waterman execution layout.";
+static const char doc[] = "Sketch tiled wavefront Smith-Waterman execution.";
 static const char args_doc[] = "";
 
 static const struct argp_option options[] = {
     { "query-length", 'q', "QUERY_LENGTH", 0,
-        "Length of the query sequence.", 0 },
+        "Maximum length of the generated query sequence.", 0 },
     { "target-length", 't', "TARGET_LENGTH", 0,
-        "Length of the target sequence.", 0 },
-    { "threads-per-block", 'b', "THREADS_PER_BLOCK", 0,
-        "Number of CUDA threads assigned to each diagonal group.", 0 },
+        "Length of the generated target sequence.", 0 },
+    { "tile-size", 'b', "TILE_SIZE", 0,
+        "Width and height of a dynamic-programming tile.", 0 },
+    { "threads-per-block", 'p', "THREADS_PER_BLOCK", 0,
+        "Number of threads per CUDA block.", 0 },
     { "sub-rate", 's', "SUB_RATE", 0,
         "Substitution error rate (0-100).", 0 },
     { "del-rate", 'd', "DEL_RATE", 0,
@@ -26,7 +29,7 @@ static const struct argp_option options[] = {
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
-    sw_diagonal_arguments_t *arguments = state->input;
+    sw_tiled_arguments_t *arguments = state->input;
 
     switch (key) {
     case 'q':
@@ -36,6 +39,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
         arguments->target_length = strtoul(arg, NULL, 10);
         break;
     case 'b':
+        arguments->tile_size = strtoul(arg, NULL, 10);
+        break;
+    case 'p':
         arguments->threads_per_block = strtoul(arg, NULL, 10);
         break;
     case 's':
@@ -57,6 +63,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
         if (arguments->query_length == 0 || arguments->target_length == 0) {
             argp_error(state, "sequence lengths must be greater than zero");
         }
+        if (arguments->tile_size == 0) {
+            argp_error(state, "tile size must be greater than zero");
+        }
         if (arguments->threads_per_block == 0) {
             argp_error(state, "threads per block must be greater than zero");
         }
@@ -69,12 +78,13 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 
 static const struct argp argp = { options, parse_opt, args_doc, doc, 0, 0, 0 };
 
-int sw_diagonal_parse_arguments(
-    int argc, char **argv, sw_diagonal_arguments_t *arguments)
+int sw_tiled_parse_arguments(
+    int argc, char **argv, sw_tiled_arguments_t *arguments)
 {
     arguments->query_length = 1024;
     arguments->target_length = 1024;
-    arguments->threads_per_block = 1024;
+    arguments->tile_size = 256;
+    arguments->threads_per_block = 256;
     arguments->sub_rate = 1;
     arguments->del_rate = 1;
     arguments->ins_rate = 1;

@@ -1,11 +1,11 @@
 #include "common.h"
 
-static int is_event(uint32_t* state, size_t rate)
+static int is_event(uint32_t *state, size_t rate)
 {
     return (xorshift32(state) >> 24) < (rate * 256u) / 100u;
 }
 
-uint32_t xorshift32(uint32_t* state)
+uint32_t xorshift32(uint32_t *state)
 {
     uint32_t value = *state;
     if (value == 0) {
@@ -21,13 +21,13 @@ uint32_t xorshift32(uint32_t* state)
     return value;
 }
 
-char random_base(uint32_t* state)
+char random_base(uint32_t *state)
 {
     static const char bases[] = "ACGT";
     return bases[xorshift32(state) >> 30];
 }
 
-void generate_sequence(char* sequence, size_t length, uint32_t* state)
+void generate_sequence(char *sequence, size_t length, uint32_t *state)
 {
     for (size_t i = 0; i < length; ++i) {
         sequence[i] = random_base(state);
@@ -35,8 +35,8 @@ void generate_sequence(char* sequence, size_t length, uint32_t* state)
 }
 
 size_t simulate_sequence(
-    const char* target, size_t target_length, char* query, size_t max_length,
-    size_t sub_rate, size_t ins_rate, size_t del_rate, uint32_t* state)
+    const char *target, size_t target_length, char *query, size_t max_length,
+    size_t sub_rate, size_t ins_rate, size_t del_rate, uint32_t *state)
 {
     size_t query_length = 0;
 

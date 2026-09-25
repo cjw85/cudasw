@@ -1,15 +1,14 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <limits.h>
-#include <time.h>
-
 #include "common.h"
 #include "cuda_utils.h"
-
 #include "sw_diagonal.h"
 #include "sw_diagonal_args.h"
 #include "sw_diagonal_cpu.h"
+
+#include <limits.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 
 // This is a simple one block design for processing all anti-diagonals of the matrix,
 // it allows us to process each anti-diagonal in parallel and sync the threads within
@@ -17,9 +16,10 @@
 // The kernel starts to beat CPU for longer target sequences, but ultimately fails
 // when we hit per-block shared memory limits: 3 x diag cells x 4 bytes
 __global__ void sw_diagonal_kernel(
-    const char* target_sequence, int target_length,
-    const char* query_sequence, int query_length,
-    int* score) {
+    const char *target_sequence, int target_length,
+    const char *query_sequence, int query_length,
+    int *score)
+{
 
     const int32_t m_score = 8;
     const int32_t d_score = -2;
@@ -32,9 +32,9 @@ __global__ void sw_diagonal_kernel(
     // reach every barrier below.
     extern __shared__ int diagonal_storage[];
     const int max_diagonal_cells = min(target_length, query_length);
-    int* previous_previous = diagonal_storage;
-    int* previous = previous_previous + max_diagonal_cells;
-    int* current = previous + max_diagonal_cells;
+    int *previous_previous = diagonal_storage;
+    int *previous = previous_previous + max_diagonal_cells;
+    int *current = previous + max_diagonal_cells;
 
     if (threadIdx.x == 0) {
         best_score = e_score;
@@ -61,15 +61,17 @@ __global__ void sw_diagonal_kernel(
             const int i = i_min + k;
             const int j = d - i;
             const int previous_i_min = max(0, d - target_length);
-            const int previous_previous_i_min =
-                max(0, d - target_length - 1);
+            const int previous_previous_i_min = max(0, d - target_length - 1);
             const int match = target_sequence[j] == query_sequence[i] ? m_score : 0;
             const int deletion = i > 0
-                ? previous[i - 1 - previous_i_min] + d_score : e_score;
+                ? previous[i - 1 - previous_i_min] + d_score
+                : e_score;
             const int insertion = j > 0
-                ? previous[i - previous_i_min] + i_score : e_score;
-            const int diagonal = (i > 0 && j > 0
-                ? previous_previous[i - 1 - previous_previous_i_min] : e_score) + match;
+                ? previous[i - previous_i_min] + i_score
+                : e_score;
+            const int diagonal = i > 0 && j > 0
+                ? match + previous_previous[i - 1 - previous_previous_i_min]
+                : match + e_score;
 
             current[k] = max(diagonal, max(deletion, insertion));
             if (i == query_length - 1 || j == target_length - 1) {
@@ -81,7 +83,7 @@ __global__ void sw_diagonal_kernel(
         // previous diagonal for the next iteration.
         __syncthreads();
 
-        int* temporary = previous_previous;
+        int *temporary = previous_previous;
         previous_previous = previous;
         previous = current;
         current = temporary;
@@ -98,8 +100,7 @@ __global__ void sw_diagonal_kernel(
     }
 }
 
-
-int run_sw_diagonal(int argc, char** argv)
+int run_sw_diagonal(int argc, char **argv)
 {
     sw_diagonal_arguments_t arguments;
     if (sw_diagonal_parse_arguments(argc, argv, &arguments) != 0) {
@@ -117,19 +118,17 @@ int run_sw_diagonal(int argc, char** argv)
         return EXIT_FAILURE;
     }
 
-    char* target_sequence = NULL;
-    char* query_sequence = NULL;
-    int* score = NULL;
+    char *target_sequence = NULL;
+    char *query_sequence = NULL;
+    int *score = NULL;
     uint32_t state = arguments.random_seed;
-    CHECK_CUDA(cudaMallocManaged(
-        &target_sequence, target_length * sizeof(char)));
-    CHECK_CUDA(cudaMallocManaged(
-        &query_sequence, max_query_length * sizeof(char)));
+    CHECK_CUDA(cudaMallocManaged(&target_sequence, target_length * sizeof(char)));
+    CHECK_CUDA(cudaMallocManaged(&query_sequence, max_query_length * sizeof(char)));
     CHECK_CUDA(cudaMallocManaged(&score, sizeof(*score)));
 
     generate_sequence(target_sequence, target_length, &state);
     printf("target length: %d\n", target_length);
-    //printf("target: %.*s\n", target_length, target_sequence);
+    // printf("target: %.*s\n", target_length, target_sequence);
 
     const int query_length = (int)simulate_sequence(
         target_sequence, target_length,
@@ -137,7 +136,7 @@ int run_sw_diagonal(int argc, char** argv)
         arguments.sub_rate, arguments.ins_rate, arguments.del_rate, &state);
 
     printf("query length: %d\n", query_length);
-    //printf("query: %.*s\n", query_length, query_sequence);
+    // printf("query: %.*s\n", query_length, query_sequence);
 
     const int n_diagonals = query_length + target_length - 1;
     const int max_cells_per_diagonal = min(query_length, target_length);
@@ -167,10 +166,8 @@ int run_sw_diagonal(int argc, char** argv)
     const clock_t cpu_start = clock();
     const int cpu_score = sw_diagonal_cpu_score(
         target_sequence, target_length, query_sequence, query_length);
-    const double cpu_milliseconds =
-        1000.0 * (double)(clock() - cpu_start) / CLOCKS_PER_SEC;
+    const double cpu_milliseconds = 1000.0 * (double)(clock() - cpu_start) / CLOCKS_PER_SEC;
     printf("cpu score: %d (%.3f ms)\n", cpu_score, cpu_milliseconds);
-
 
     CHECK_CUDA(cudaEventDestroy(gpu_end));
     CHECK_CUDA(cudaEventDestroy(gpu_start));

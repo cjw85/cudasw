@@ -82,3 +82,14 @@ Its dynamic shared-memory request is therefore:
 So for a query of 8000 characters this is about 96 KiB.
 That is more than the per-block shared-memory allowance on many GPUs, so CUDA rejects the launch with an `invalid argument` error.
 Keeping the shorter sequence at 1024 uses 12 KiB and fits comfortably on typical devices.
+
+### sw-tiled
+
+`sw-tiled` is a tiled implementation where each thread block computes a tile of the DP matrix.
+For each tile the kernel follows the same anti-diagonal scheme, albeit we have to handle passing the boundary conditions from one tile to the next.
+
+Tiles on the same tile anti-diagonal can run in different CUDA blocks.
+The program launches one kernel for each tile wave, using the end of a kernel launch as a global synchronisation point.
+
+This works around the shared-memory limits and offers enough independent work for a GPU to be useful.
+It enables 100k x 100k alignments to be computed in under a second, compared to 20 seconds on CPU (or around 11 seconds for the AVX2 version).

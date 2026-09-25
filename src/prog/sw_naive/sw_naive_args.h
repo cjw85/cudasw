@@ -20,7 +20,7 @@ typedef struct sw_naive_arguments {
 extern "C" {
 #endif
 
-int sw_naive_parse_arguments(int argc, char** argv, sw_naive_arguments_t* arguments);
+int sw_naive_parse_arguments(int argc, char **argv, sw_naive_arguments_t *arguments);
 
 #ifdef __cplusplus
 }

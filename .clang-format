@@ -1,0 +1,16 @@
+BasedOnStyle: WebKit
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: true
+  AfterControlStatement: Never
+PointerAlignment: Right
+SortIncludes: true
+IncludeBlocks: Regroup
+ReflowComments: true
+AllowShortIfStatementsOnASingleLine: Never
+UseTab: Never
+IndentWidth: 4
+ContinuationIndentWidth: 4
+AlignAfterOpenBracket: DontAlign
+AlignEscapedNewlines: DontAlign
+Cpp11BracedListStyle: false

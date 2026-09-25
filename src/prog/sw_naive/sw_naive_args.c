@@ -1,8 +1,8 @@
-#include <argp.h>
-#include <string.h>
-#include <stdlib.h>
-
 #include "sw_naive_args.h"
+
+#include <argp.h>
+#include <stdlib.h>
+#include <string.h>
 
 static const char doc[] = "Run a bunch of Smith-Waterman alignments.";
 static const char args_doc[] = "";
@@ -26,9 +26,9 @@ static const struct argp_option options[] = {
         "Number of CUDA threads per block.", 0 },
     { 0 }
 };
-static error_t parse_opt(int key, char* arg, struct argp_state* state)
+static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
-    sw_naive_arguments_t* arguments = state->input;
+    sw_naive_arguments_t *arguments = state->input;
 
     switch (key) {
     case 'n':
@@ -47,11 +47,10 @@ static error_t parse_opt(int key, char* arg, struct argp_state* state)
         argp_error(state, "unexpected positional argument: '%s'", arg);
         break;
     case ARGP_KEY_END:
-        if (arguments->target_length == 0 ||
-            arguments->target_length > SW_NAIVE_MAX_TARGET_LENGTH) {
+        if (arguments->target_length == 0 || arguments->target_length > SW_NAIVE_MAX_TARGET_LENGTH) {
             argp_error(state,
-                       "target length must be between 1 and %d",
-                       SW_NAIVE_MAX_TARGET_LENGTH);
+                "target length must be between 1 and %d",
+                SW_NAIVE_MAX_TARGET_LENGTH);
         }
         break;
     case 'r':
@@ -74,7 +73,7 @@ static error_t parse_opt(int key, char* arg, struct argp_state* state)
 
 static const struct argp argp = { options, parse_opt, args_doc, doc, 0, 0, 0 };
 
-int sw_naive_parse_arguments(int argc, char** argv, sw_naive_arguments_t* arguments)
+int sw_naive_parse_arguments(int argc, char **argv, sw_naive_arguments_t *arguments)
 {
     arguments->n_targets = 16;
     arguments->target_length = 1024;
