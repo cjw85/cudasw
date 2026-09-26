@@ -40,11 +40,17 @@ int run_vec_add(int argc, char **argv)
         b[index] = arguments.b_value;
     }
 
+    float *device_a = CUDA_DEVICE_POINTER(a);
+    float *device_b = CUDA_DEVICE_POINTER(b);
+    float *device_result = CUDA_DEVICE_POINTER(result);
+
     const int blocks = (arguments.vector_length + arguments.threads_per_block - 1) / arguments.threads_per_block;
     if (strcmp(arguments.operation, "add") == 0) {
-        add_vectors<<<blocks, arguments.threads_per_block>>>(a, b, result, arguments.vector_length);
+        add_vectors<<<blocks, arguments.threads_per_block>>>(
+            device_a, device_b, device_result, arguments.vector_length);
     } else {
-        multiply_vectors<<<blocks, arguments.threads_per_block>>>(a, b, result, arguments.vector_length);
+        multiply_vectors<<<blocks, arguments.threads_per_block>>>(
+            device_a, device_b, device_result, arguments.vector_length);
     }
     CHECK_CUDA(cudaGetLastError());
     CHECK_CUDA(cudaDeviceSynchronize());
@@ -54,8 +60,8 @@ int run_vec_add(int argc, char **argv)
         printf("result[%d] = %.0f\n", index, result[index]);
     }
 
-    CHECK_CUDA(cudaFree(result));
-    CHECK_CUDA(cudaFree(b));
-    CHECK_CUDA(cudaFree(a));
+    CHECK_CUDA(CUDA_MANAGED_FREE(result));
+    CHECK_CUDA(CUDA_MANAGED_FREE(b));
+    CHECK_CUDA(CUDA_MANAGED_FREE(a));
     return EXIT_SUCCESS;
 }

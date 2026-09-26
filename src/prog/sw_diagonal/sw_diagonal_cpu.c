@@ -1,5 +1,7 @@
 #include "sw_diagonal_cpu.h"
 
+#include "common.h"
+
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,16 +9,6 @@
 #if defined(__x86_64__) || defined(__i386__)
 #include <immintrin.h>
 #endif
-
-static int min_int(int first, int second)
-{
-    return first < second ? first : second;
-}
-
-static int max_int(int first, int second)
-{
-    return first > second ? first : second;
-}
 
 static int sw_diagonal_cpu_score_scalar(
     const char *target_sequence, int target_length,

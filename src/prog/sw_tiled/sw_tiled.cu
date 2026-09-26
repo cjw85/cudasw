@@ -178,6 +178,12 @@ int sw_tiled_score(
     CHECK_CUDA(cudaMallocManaged(
         &tile_scores, tile_count * sizeof(*tile_scores)));
 
+    const char *device_target_sequence = CUDA_DEVICE_POINTER(target_sequence);
+    const char *device_query_sequence = CUDA_DEVICE_POINTER(query_sequence);
+    int *device_bottom_boundaries = CUDA_DEVICE_POINTER(bottom_boundaries);
+    int *device_right_boundaries = CUDA_DEVICE_POINTER(right_boundaries);
+    int *device_tile_scores = CUDA_DEVICE_POINTER(tile_scores);
+
     cudaEvent_t gpu_start;
     cudaEvent_t gpu_end;
     CHECK_CUDA(cudaEventCreate(&gpu_start));
@@ -185,14 +191,16 @@ int sw_tiled_score(
     CHECK_CUDA(cudaEventRecord(gpu_start));
 
     for (int wave = 0; wave < tile_diagonals; ++wave) {
-        const int first_tile_row = max(0, wave - (target_tiles - 1));
-        const int last_tile_row = min(wave, query_tiles - 1);
+        const int first_tile_row = max_int(0, wave - (target_tiles - 1));
+        const int last_tile_row = min_int(wave, query_tiles - 1);
         const int blocks = last_tile_row - first_tile_row + 1;
         const size_t shared_bytes = 3 * (size_t)tile_size * sizeof(int);
         sw_tiled_kernel<<<blocks, threads_per_block, shared_bytes>>>(
-            target_sequence, target_length, query_sequence, query_length,
+            device_target_sequence, target_length,
+            device_query_sequence, query_length,
             tile_size, query_tiles, target_tiles, first_tile_row, wave,
-            bottom_boundaries, right_boundaries, tile_scores);
+            device_bottom_boundaries, device_right_boundaries,
+            device_tile_scores);
         CHECK_CUDA(cudaGetLastError());
     }
 
@@ -207,17 +215,17 @@ int sw_tiled_score(
     // of the final target tile column.
     int score = 0;
     const int final_tile_row = query_tiles - 1;
-    const int final_tile_height = min(
+    const int final_tile_height = min_int(
         tile_size, query_length - final_tile_row * tile_size);
 
     // scan the bottom edge of every tile in the final query row. Each tile's
     // bottom boundary stores one value for each target column in that tile.
     for (int tile_column = 0; tile_column < target_tiles; ++tile_column) {
         const size_t tile_id = (size_t)final_tile_row * target_tiles + tile_column;
-        const int tile_width = min(
+        const int tile_width = min_int(
             tile_size, target_length - tile_column * tile_size);
         for (int j = 0; j < tile_width; ++j) {
-            score = max(
+            score = max_int(
                 score, bottom_boundaries[tile_id * (size_t)tile_size + j]);
         }
     }
@@ -227,15 +235,15 @@ int sw_tiled_score(
     // the complete bottom row and rightmost column of the DP matrix.
     const size_t final_tile_id = (size_t)final_tile_row * target_tiles + target_tiles - 1;
     for (int i = 0; i < final_tile_height; ++i) {
-        score = max(
+        score = max_int(
             score, right_boundaries[final_tile_id * (size_t)tile_size + i]);
     }
 
     CHECK_CUDA(cudaEventDestroy(gpu_end));
     CHECK_CUDA(cudaEventDestroy(gpu_start));
-    CHECK_CUDA(cudaFree(bottom_boundaries));
-    CHECK_CUDA(cudaFree(right_boundaries));
-    CHECK_CUDA(cudaFree(tile_scores));
+    CHECK_CUDA(CUDA_MANAGED_FREE(bottom_boundaries));
+    CHECK_CUDA(CUDA_MANAGED_FREE(right_boundaries));
+    CHECK_CUDA(CUDA_MANAGED_FREE(tile_scores));
     return score;
 }
 
@@ -301,7 +309,7 @@ int run_sw_tiled(int argc, char **argv)
     printf("tiled GPU time: %.3f ms\n", gpu_milliseconds);
     printf("tiled score: %d\n", tiled_score);
 
-    CHECK_CUDA(cudaFree(target_sequence));
-    CHECK_CUDA(cudaFree(query_sequence));
+    CHECK_CUDA(CUDA_MANAGED_FREE(target_sequence));
+    CHECK_CUDA(CUDA_MANAGED_FREE(query_sequence));
     return EXIT_SUCCESS;
 }

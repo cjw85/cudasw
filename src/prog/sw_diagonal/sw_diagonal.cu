@@ -139,7 +139,7 @@ int run_sw_diagonal(int argc, char **argv)
     // printf("query: %.*s\n", query_length, query_sequence);
 
     const int n_diagonals = query_length + target_length - 1;
-    const int max_cells_per_diagonal = min(query_length, target_length);
+    const int max_cells_per_diagonal = min_int(query_length, target_length);
 
     printf("anti-diagonals: %d\n", n_diagonals);
     printf("maximum cells on one anti-diagonal: %d\n", max_cells_per_diagonal);
@@ -152,9 +152,12 @@ int run_sw_diagonal(int argc, char **argv)
     CHECK_CUDA(cudaEventCreate(&gpu_start));
     CHECK_CUDA(cudaEventCreate(&gpu_end));
     CHECK_CUDA(cudaEventRecord(gpu_start));
+    const char *device_target_sequence = CUDA_DEVICE_POINTER(target_sequence);
+    const char *device_query_sequence = CUDA_DEVICE_POINTER(query_sequence);
+    int *device_score = CUDA_DEVICE_POINTER(score);
     sw_diagonal_kernel<<<1, arguments.threads_per_block, shared_bytes>>>(
-        target_sequence, target_length,
-        query_sequence, query_length, score);
+        device_target_sequence, target_length,
+        device_query_sequence, query_length, device_score);
 
     CHECK_CUDA(cudaGetLastError());
     CHECK_CUDA(cudaEventRecord(gpu_end));
@@ -171,9 +174,9 @@ int run_sw_diagonal(int argc, char **argv)
 
     CHECK_CUDA(cudaEventDestroy(gpu_end));
     CHECK_CUDA(cudaEventDestroy(gpu_start));
-    CHECK_CUDA(cudaFree(score));
-    CHECK_CUDA(cudaFree(target_sequence));
-    CHECK_CUDA(cudaFree(query_sequence));
+    CHECK_CUDA(CUDA_MANAGED_FREE(score));
+    CHECK_CUDA(CUDA_MANAGED_FREE(target_sequence));
+    CHECK_CUDA(CUDA_MANAGED_FREE(query_sequence));
 
     return EXIT_SUCCESS;
 }

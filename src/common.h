@@ -8,6 +8,16 @@
 extern "C" {
 #endif
 
+static inline int min_int(int first, int second)
+{
+    return first < second ? first : second;
+}
+
+static inline int max_int(int first, int second)
+{
+    return first > second ? first : second;
+}
+
 uint32_t xorshift32(uint32_t *state);
 char random_base(uint32_t *state);
 void generate_sequence(char *sequence, size_t length, uint32_t *state);

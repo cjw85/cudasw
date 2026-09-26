@@ -46,8 +46,8 @@ static int run_case(const char *name, int pattern)
     memcpy(device_query, query, length * sizeof(*device_query));
     const int gpu_score = sw_tiled_score(
         device_target, length, device_query, length, tile_size, tile_size, NULL);
-    CHECK_CUDA(cudaFree(device_target));
-    CHECK_CUDA(cudaFree(device_query));
+    CHECK_CUDA(CUDA_MANAGED_FREE(device_target));
+    CHECK_CUDA(CUDA_MANAGED_FREE(device_query));
     if (gpu_score != expected) {
         fprintf(stderr, "%s: expected %d, got %d\n", name, expected, gpu_score);
         return EXIT_FAILURE;

@@ -8,6 +8,7 @@
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 __global__ void sw_naive_kernel(
     const char *targets, const int *target_lengths,
@@ -49,7 +50,7 @@ __global__ void sw_naive_kernel(
     for (int qi = 0; qi < query_length; ++qi) {
         // The first column is a free leading gap in the target.
         curr[0] = e_score;
-        for (size_t ti = 0; ti < actual_target_length; ++ti) {
+        for (int ti = 0; ti < actual_target_length; ++ti) {
             int32_t match = (target[ti] == query[qi]) ? m_score : 0;
             int32_t diag = (ti > 0 ? prev[ti - 1] : e_score) + match;
             int32_t del = prev[ti] + d_score;
@@ -136,10 +137,15 @@ int run_sw_naive(int argc, char **argv)
     size_t blocks = (n_alignments + arguments.threads_per_block - 1) / arguments.threads_per_block;
     uint32_t *scores;
     CHECK_CUDA(cudaMallocManaged(&scores, n_alignments * sizeof(uint32_t)));
+    char *device_targets = CUDA_DEVICE_POINTER(targets);
+    int *device_target_lengths = CUDA_DEVICE_POINTER(target_lengths);
+    char *device_queries = CUDA_DEVICE_POINTER(queries);
+    int *device_query_lengths = CUDA_DEVICE_POINTER(query_lengths);
+    uint32_t *device_scores = CUDA_DEVICE_POINTER(scores);
     // launch the CUDA kernel to compute Smith-Waterman scores
     sw_naive_kernel<<<blocks, arguments.threads_per_block>>>(
-        targets, target_lengths, queries,
-        query_lengths, scores,
+        device_targets, device_target_lengths, device_queries,
+        device_query_lengths, device_scores,
         arguments.n_targets, n_generated_queries, arguments.target_length);
     CHECK_CUDA(cudaGetLastError());
     CHECK_CUDA(cudaDeviceSynchronize());
@@ -147,8 +153,20 @@ int run_sw_naive(int argc, char **argv)
     // get best score for each query and associate it with its target
     // given how we generated the sequences, this should come out in
     // blocks of queries corresponding to each target sequence
-    uint32_t best_score[n_generated_queries] = { 0 };
-    uint32_t best_target[n_generated_queries] = { 0 };
+    uint32_t *best_score = (uint32_t *)calloc(
+        n_generated_queries, sizeof(*best_score));
+    uint32_t *best_target = (uint32_t *)calloc(
+        n_generated_queries, sizeof(*best_target));
+    if (best_score == NULL || best_target == NULL) {
+        free(best_score);
+        free(best_target);
+        CHECK_CUDA(CUDA_MANAGED_FREE(targets));
+        CHECK_CUDA(CUDA_MANAGED_FREE(target_lengths));
+        CHECK_CUDA(CUDA_MANAGED_FREE(queries));
+        CHECK_CUDA(CUDA_MANAGED_FREE(query_lengths));
+        CHECK_CUDA(CUDA_MANAGED_FREE(scores));
+        return EXIT_FAILURE;
+    }
     for (size_t t_index = 0; t_index < arguments.n_targets; ++t_index) {
         for (size_t q_index = 0; q_index < n_generated_queries; ++q_index) {
             size_t index = t_index * n_generated_queries + q_index;
@@ -165,13 +183,15 @@ int run_sw_naive(int argc, char **argv)
             q_index, query_lengths[q_index], best_target[q_index], source_target,
             target_lengths[source_target]);
     }
+    free(best_score);
+    free(best_target);
 
     // free allocated memory
-    CHECK_CUDA(cudaFree(targets));
-    CHECK_CUDA(cudaFree(target_lengths));
-    CHECK_CUDA(cudaFree(queries));
-    CHECK_CUDA(cudaFree(query_lengths));
-    CHECK_CUDA(cudaFree(scores));
+    CHECK_CUDA(CUDA_MANAGED_FREE(targets));
+    CHECK_CUDA(CUDA_MANAGED_FREE(target_lengths));
+    CHECK_CUDA(CUDA_MANAGED_FREE(queries));
+    CHECK_CUDA(CUDA_MANAGED_FREE(query_lengths));
+    CHECK_CUDA(CUDA_MANAGED_FREE(scores));
 
     return EXIT_SUCCESS;
 }
