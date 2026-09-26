@@ -50,23 +50,23 @@ __global__ void sw_tiled_kernel(
     // the tile we are processing
     const int tile_row = first_tile_row + blockIdx.x;
     const int tile_column = tile_wave - tile_row;
-    const int tile_id = tile_row * tile_grid_columns + tile_column;
+    const size_t tile_id = (size_t)tile_row * tile_grid_columns + tile_column;
 
     // neighbouring tiles from which this tile will get its boundary values
     // above
-    const int above_tile_id = tile_id - tile_grid_columns;
+    const size_t above_tile_id = tile_id - tile_grid_columns;
     const int *top_boundary = tile_row > 0
-        ? &bottom_boundaries[above_tile_id * tile_size]
+        ? &bottom_boundaries[above_tile_id * (size_t)tile_size]
         : NULL;
 
     // left
-    const int left_tile_id = tile_id - 1;
+    const size_t left_tile_id = tile_id - 1;
     const int *left_boundary = tile_column > 0
-        ? &right_boundaries[left_tile_id * tile_size]
+        ? &right_boundaries[left_tile_id * (size_t)tile_size]
         : NULL;
 
     // above-left
-    const int above_left_tile_id = tile_id - tile_grid_columns - 1;
+    const size_t above_left_tile_id = tile_id - tile_grid_columns - 1;
     const int diagonal_boundary = tile_row > 0 && tile_column > 0
         ? tile_scores[above_left_tile_id]
         : e_score;
@@ -130,10 +130,10 @@ __global__ void sw_tiled_kernel(
                 max(deletion, insertion));
             current[k] = value;
             if (i == tile_height - 1) {
-                bottom_boundaries[tile_id * tile_size + j] = value;
+                bottom_boundaries[tile_id * (size_t)tile_size + j] = value;
             }
             if (j == tile_width - 1) {
-                right_boundaries[tile_id * tile_size + i] = value;
+                right_boundaries[tile_id * (size_t)tile_size + i] = value;
             }
             if (i == tile_height - 1 && j == tile_width - 1) {
                 tile_scores[tile_id] = value;
@@ -213,20 +213,22 @@ int sw_tiled_score(
     // scan the bottom edge of every tile in the final query row. Each tile's
     // bottom boundary stores one value for each target column in that tile.
     for (int tile_column = 0; tile_column < target_tiles; ++tile_column) {
-        const int tile_id = final_tile_row * target_tiles + tile_column;
+        const size_t tile_id = (size_t)final_tile_row * target_tiles + tile_column;
         const int tile_width = min(
             tile_size, target_length - tile_column * tile_size);
         for (int j = 0; j < tile_width; ++j) {
-            score = max(score, bottom_boundaries[tile_id * tile_size + j]);
+            score = max(
+                score, bottom_boundaries[tile_id * (size_t)tile_size + j]);
         }
     }
 
     // the bottom-right tile also contributes its right edge, which contains
     // the remaining cells in the final query rows. Together these scans cover
     // the complete bottom row and rightmost column of the DP matrix.
-    const int final_tile_id = final_tile_row * target_tiles + target_tiles - 1;
+    const size_t final_tile_id = (size_t)final_tile_row * target_tiles + target_tiles - 1;
     for (int i = 0; i < final_tile_height; ++i) {
-        score = max(score, right_boundaries[final_tile_id * tile_size + i]);
+        score = max(
+            score, right_boundaries[final_tile_id * (size_t)tile_size + i]);
     }
 
     CHECK_CUDA(cudaEventDestroy(gpu_end));
@@ -279,11 +281,18 @@ int run_sw_tiled(int argc, char **argv)
     printf("tile grid: %d x %d\n", query_tiles, target_tiles);
     printf("tile anti-diagonals: %d\n", tile_diagonals);
 
-    const clock_t cpu_start = clock();
-    const int cpu_score = sw_diagonal_cpu_score(
-        target_sequence, target_length, query_sequence, query_length);
-    const double cpu_milliseconds = 1000.0 * (double)(clock() - cpu_start) / CLOCKS_PER_SEC;
-    printf("cpu score: %d (%.3f ms)\n", cpu_score, cpu_milliseconds);
+    if (arguments.run_cpu) {
+        struct timespec cpu_start;
+        struct timespec cpu_end;
+        clock_gettime(CLOCK_MONOTONIC, &cpu_start);
+        const int cpu_score = sw_diagonal_cpu_score(
+            target_sequence, target_length, query_sequence, query_length);
+        clock_gettime(CLOCK_MONOTONIC, &cpu_end);
+        const double cpu_milliseconds = 1000.0 * (double)(cpu_end.tv_sec - cpu_start.tv_sec)
+            + (double)(cpu_end.tv_nsec - cpu_start.tv_nsec) / 1.0e6;
+        printf("cpu score: %d (%.3f ms)\n",
+            cpu_score, cpu_milliseconds);
+    }
 
     float gpu_milliseconds = 0.0f;
     const int tiled_score = sw_tiled_score(

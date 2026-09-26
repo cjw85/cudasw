@@ -6,6 +6,7 @@
 
 static const char doc[] = "Sketch tiled wavefront Smith-Waterman execution.";
 static const char args_doc[] = "";
+enum { no_cpu_option = 1000 };
 
 static const struct argp_option options[] = {
     { "query-length", 'q', "QUERY_LENGTH", 0,
@@ -24,6 +25,8 @@ static const struct argp_option options[] = {
         "Insertion error rate (0-100).", 0 },
     { "seed", 'r', "SEED", 0,
         "Random seed for sequence generation.", 0 },
+    { "no-cpu", no_cpu_option, 0, 0,
+        "Skip the CPU alignment and timing.", 0 },
     { 0 }
 };
 
@@ -55,6 +58,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
         break;
     case 'r':
         arguments->random_seed = strtoul(arg, NULL, 10);
+        break;
+    case no_cpu_option:
+        arguments->run_cpu = 0;
         break;
     case ARGP_KEY_ARG:
         argp_error(state, "unexpected positional argument: '%s'", arg);
@@ -89,5 +95,6 @@ int sw_tiled_parse_arguments(
     arguments->del_rate = 1;
     arguments->ins_rate = 1;
     arguments->random_seed = 0;
+    arguments->run_cpu = 1;
     return argp_parse(&argp, argc, argv, 0, 0, arguments);
 }

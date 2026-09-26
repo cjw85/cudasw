@@ -12,6 +12,7 @@ typedef struct sw_tiled_arguments {
     size_t del_rate;
     size_t ins_rate;
     size_t random_seed;
+    int run_cpu;
 } sw_tiled_arguments_t;
 
 #ifdef __cplusplus

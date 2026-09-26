@@ -38,7 +38,6 @@ static int run_case(const char *name, int pattern)
         fprintf(stderr, "%s: expected %d, got %d\n", name, expected, cpu_score);
         return EXIT_FAILURE;
     }
-
     char *device_target = NULL;
     char *device_query = NULL;
     CHECK_CUDA(cudaMallocManaged(&device_target, length * sizeof(*device_target)));
