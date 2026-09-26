@@ -169,17 +169,28 @@ CUDASW_SSE41_TARGET static int sw_diagonal_cpu_score_sse41(
         }
 
         for (int k = vector_start; k < aligned_vector_end; k += 4) {
-            // TODO: vectorize this
-            int matches[4];
-            for (int lane = 0; lane < 4; ++lane) {
-                const int i = i_min + k + lane;
-                const int j = d - i;
-                matches[lane] = target_sequence[j] == query_sequence[i]
-                    ? m_score
-                    : e_score;
-            }
-            // load the above to SSE4.1
-            const __m128i match = _mm_loadu_si128((const __m128i *)matches);
+            const int i = i_min + k;
+            const int j = d - i;
+            // Scalar equivalent for lane l:
+            // target_sequence[j - l] == query_sequence[i + l]
+            //     ? m_score : e_score.
+            // Load query_sequence[i..i+3].
+            const __m128i query_chars = _mm_loadu_si32(query_sequence + i);
+            // Load target_sequence[j-3..j], then reverse it to j..j-3.
+            const __m128i target_chars = _mm_loadu_si32(target_sequence + j - 3);
+            const __m128i reverse = _mm_setr_epi8(
+                3, 2, 1, 0, -1, -1, -1, -1,
+                -1, -1, -1, -1, -1, -1, -1, -1);
+            const __m128i target_reversed = _mm_shuffle_epi8(
+                target_chars, reverse);
+            // equal[l] is 0xff when the corresponding bases match, else 0.
+            const __m128i equal = _mm_cmpeq_epi8(
+                target_reversed, query_chars);
+            // Convert the comparison mask to byte scores: m_score or e_score(0).
+            const __m128i match_bytes = _mm_and_si128(
+                equal, _mm_set1_epi8((char)m_score));
+            // Widen four byte scores to the four int32 DP values.
+            const __m128i match = _mm_cvtepu8_epi32(match_bytes);
 
             // deletion = previous[k + deletion_offset].
             const int deletion_offset = i_min - 1 - previous_i_min;
@@ -301,17 +312,31 @@ __attribute__((target("avx2"))) static int sw_diagonal_cpu_score_avx2(
         }
 
         for (int k = vector_start; k < aligned_vector_end; k += 8) {
-            // TODO: vectorize this with __mm_cmpeq_epi8
-            int matches[8];
-            for (int lane = 0; lane < 8; ++lane) {
-                const int i = i_min + k + lane;
-                const int j = d - i;
-                matches[lane] = target_sequence[j] == query_sequence[i]
-                    ? m_score
-                    : e_score;
-            }
-            // load the above to AVX2
-            const __m256i match = _mm256_loadu_si256((const __m256i *)matches);
+            const int i = i_min + k;
+            const int j = d - i;
+
+            // Scalar equivalent for lane l:
+            // target_sequence[j - l] == query_sequence[i + l]
+            //     ? m_score : e_score.
+            // Load query_sequence[i..i+7].
+            const __m128i query_chars = _mm_loadl_epi64(
+                (const __m128i *)(query_sequence + i));
+            // Load target_sequence[j-7..j], then reverse it to j..j-7.
+            const __m128i target_chars = _mm_loadl_epi64(
+                (const __m128i *)(target_sequence + j - 7));
+            const __m128i reverse = _mm_setr_epi8(
+                7, 6, 5, 4, 3, 2, 1, 0,
+                -1, -1, -1, -1, -1, -1, -1, -1);
+            const __m128i target_reversed = _mm_shuffle_epi8(
+                target_chars, reverse);
+            // equal[l] is 0xff when the corresponding bases match, else 0.
+            const __m128i equal = _mm_cmpeq_epi8(
+                target_reversed, query_chars);
+            // Convert the comparison mask to byte scores: m_score or e_score(0).
+            const __m128i match_bytes = _mm_and_si128(
+                equal, _mm_set1_epi8((char)m_score));
+            // Widen eight byte scores to the eight int32 DP values.
+            const __m256i match = _mm256_cvtepu8_epi32(match_bytes);
 
             // deletion = previous[k + deletion_offset].
             const int deletion_offset = i_min - 1 - previous_i_min;

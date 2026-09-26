@@ -98,3 +98,24 @@ It enables 100k x 100k alignments to be computed in under a second, compared to 
 
 The `--no-cpu` to skip the reference CPU alignment and measure only the tiled GPU implementation.
 (This isn't a fair test in some ways as the CPU implementation is not tiled and threaded).
+
+The table below shows timings for median-of-seven run with `--del-rate 5 --ins-rate 5 --sub-rate 3` and different target and query legnths, on two different machine configurations.
+
++---------------+--------------+---------+---------------+---------------+
+| target length | query length | machine | cpu time / ms | gpu time / ms |
++---------------+--------------+---------+---------------+---------------+
+|         1,024 |        1,024 | macOS   |         0.289 |         3.089 |
+|               |              | linux   |         0.295 |         1.764 |
++---------------+--------------+---------+---------------+- -------------+
+|        10,000 |       10,000 | macOS   |        25.976 |         3.778 |
+|               |              | linux   |        19.121 |        16.743 |
++---------------+--------------+---------+---------------+---------------+
+|       100,000 |      100,000 | macOS   |     2,657.221 |         5.051 |
+|               |              | linux   |     2,022.695 |       199.967 |
++---------------+--------------+---------+---------------+---------------+
+|     1,000,000 |      100,000 | macOS   |    26,113.945 |        12.937 |
+|               |              | linux   |    25,874.395 |     1,316.068 |
++---------------+--------------+---------+---------------+---------------+
+
+The macOS machine is surprisingly capable; the way the kernel launches and waves are setup currently clearly don't lend themselves to the NVIDIA GPU on the linux host.
+(Note: the AVX2 kernel benefits greatly from having the match loop vectorised, which is the gnarliest of the operations to vectorise).

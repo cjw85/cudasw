@@ -1,0 +1,12 @@
+diff --git a/crates/mvcc-cudart/src/runtime.rs b/crates/mvcc-cudart/src/runtime.rs
+--- a/crates/mvcc-cudart/src/runtime.rs
++++ b/crates/mvcc-cudart/src/runtime.rs
+@@ -21,1 +21,7 @@
+-fn gpu_wait_ms() -> i64 { GPU_WAIT_MS }
++fn gpu_wait_ms() -> i64 {
++    std::env::var("MVCC_GPU_WAIT_MS")
++        .ok()
++        .and_then(|s| s.parse::<i64>().ok())
++        .filter(|&ms| ms >= -1)
++        .unwrap_or(GPU_WAIT_MS)
++}

@@ -9,6 +9,7 @@ MVCC_DIR := thirdparty/mvcc
 MVCC_TOOLKIT := $(MVCC_DIR)/toolkit
 MVCC_NVCC := $(MVCC_TOOLKIT)/bin/nvcc
 MVCC_STAMP := $(MVCC_DIR)/.toolkit-installed
+MVCC_PATCH := patches/mvcc-gpu-wait-env.patch
 # argp CLI header
 ARGP_PREFIX := $(shell brew --prefix argp-standalone 2>/dev/null)
 ifneq ($(ARGP_PREFIX),)
@@ -142,7 +143,7 @@ $(TILED_TEST_OBJECT): test/sw_tiled_test.cu $(HEADER_SOURCES) | $(CUDA_TOOLKIT_P
 
 
 ifeq ($(HOST_OS),Darwin)
-$(MVCC_STAMP):
+$(MVCC_STAMP): $(MVCC_PATCH)
 	@mkdir -p thirdparty
 	@if [ -e "$(MVCC_DIR)" ] && [ ! -d "$(MVCC_DIR)/.git" ]; then \
 		echo "$(MVCC_DIR) exists but is not an mvcc checkout" >&2; exit 1; \
@@ -150,6 +151,12 @@ $(MVCC_STAMP):
 	@if [ ! -d "$(MVCC_DIR)/.git" ]; then \
 		echo "Cloning mvcc into $(MVCC_DIR)"; \
 		git clone --depth 1 "$(MVCC_REPOSITORY)" "$(MVCC_DIR)"; \
+	fi
+	@if grep -q 'MVCC_GPU_WAIT_MS' "$(MVCC_DIR)/crates/mvcc-cudart/src/runtime.rs"; then \
+		echo "MVCC GPU wait patch already applied"; \
+	else \
+		echo "Applying MVCC GPU wait patch"; \
+		patch -d "$(MVCC_DIR)" -p1 < "$(CURDIR)/$(MVCC_PATCH)"; \
 	fi
 	@echo "Building mvcc toolkit (requires Homebrew llvm, cmake, ninja, argp-standalone, and Rust)"
 	@cd "$(MVCC_DIR)" && tools/install_toolkit.sh
