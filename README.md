@@ -12,9 +12,8 @@ make
 make run
 make help
 build/cudasw --help
-build/cudasw sw-naive \
-    --n-targets 32 --target-length 1024 \
-    --n-queries-per-target 32
+build/cudasw sw-tiled \
+    --target-length 8096 --query-length 8096
 ```
 
 ### Apple silicon
@@ -23,11 +22,15 @@ On macOS, the Makefile uses [mvcc](https://github.com/doximity/mvcc) as a CUDA-c
 `make` will clone `mvcc` into `thirdparty/mvcc` and build its toolkit automatically.
 There are some help macros in `src/common.h` that assist with using CUDA on macOS.
 
+The CPU implementation uses sse2neon to allow use of the SSE4 version of the code.
+
 ## Experiments
 
 Its a bit grand to call these experiments, given everything here is known and standard to anyone already in the game.
 
 The presentation order below is simply the order I wrote the code.
+
+> **The code is not intended to be used in production implementations**
 
 ### vec-add
 
@@ -65,6 +68,7 @@ The kernel therefore keeps three rotating diagonal buffers in shared memory: the
 A block-wide synchronisation is required after each diagonal before the buffers can rotate.
 
 The program runs the same recurrence through `sw_diagonal_cpu.c` after the CUDA kernel.
+The CPU code includes SSE4 and AVX2 implementations.
 The two printed scores should agree.
 GPU timing uses CUDA events around the kernel; CPU timing uses a monotonic wall clock.
 
@@ -93,3 +97,4 @@ This works around the shared-memory limits and creates enough independent work f
 It enables 100k x 100k alignments to be computed in under a second, compared to 20 seconds on CPU (or around 11 seconds for the AVX2 version).
 
 The `--no-cpu` to skip the reference CPU alignment and measure only the tiled GPU implementation.
+(This isn't a fair test in some ways as the CPU implementation is not tiled and threaded).

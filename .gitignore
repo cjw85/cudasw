@@ -1,2 +1,4 @@
 /build/
-/thirdparty/
+!/thirdparty/
+/thirdparty/*
+!/thirdparty/sse2neon/

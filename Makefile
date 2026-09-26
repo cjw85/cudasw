@@ -1,6 +1,7 @@
 .DEFAULT_GOAL := build
 
 HOST_OS := $(shell uname -s)
+HOST_ARCH := $(shell uname -m)
 ifeq ($(HOST_OS),Darwin)
 # mvcc CUDA compiler for macOS
 MVCC_REPOSITORY := https://github.com/doximity/mvcc.git
@@ -46,6 +47,15 @@ CFLAGS := -std=c11
 CPPFLAGS := -Isrc -Isrc/prog/vec_add -Isrc/prog/sw_naive
 CPPFLAGS += -Isrc/prog/sw_diagonal -Isrc/prog/sw_tiled
 CPPFLAGS += $(ARGP_CPPFLAGS) $(MVCC_CPPFLAGS)
+
+# Use the maintained DLTcollab SSE2NEON compatibility header on ARM. The path
+# remains configurable for alternate vendoring layouts.
+SSE2NEON_DIR ?= thirdparty/sse2neon
+ifneq ($(filter arm64 aarch64,$(HOST_ARCH)),)
+ifneq ($(wildcard $(SSE2NEON_DIR)/sse2neon.h),)
+CPPFLAGS += -isystem $(SSE2NEON_DIR) -DCUDASW_USE_SSE2NEON
+endif
+endif
 
 ifeq ($(BUILD_MODE),release)
 MODE_FLAGS := -O3
